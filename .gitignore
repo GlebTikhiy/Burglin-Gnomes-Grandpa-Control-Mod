@@ -1,0 +1,19 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# User / IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Logs / temp
+*.log
+*.tmp
+
+# Local dotnet cache
+.dotnet/
+
+# Game local files or private paths
+*.pdb
