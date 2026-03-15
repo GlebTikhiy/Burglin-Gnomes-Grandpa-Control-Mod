@@ -17,3 +17,4 @@
 
 # Game local files or private paths
 *.pdb
+_stable_camera_base.cs
