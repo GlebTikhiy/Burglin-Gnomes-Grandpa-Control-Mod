@@ -6,23 +6,28 @@ Player-controlled Grandpa mod for **Burglin' Gnomes Demo** (BepInEx plugin).
 - Assigns Grandpa control to the **host player** at round start.
 - Keeps the original player entity hidden as a network anchor.
 - Replaces Grandpa AI movement with manual input.
-- Supports movement, run, crouch, camera, grab/release/throw/shoot actions.
-- Adds stronger wall/camera collision handling to reduce clipping.
-- Adds fallback wake-up logic when Grandpa spawns in bed/lying state.
+- Supports manual Grandpa movement, camera, grab/release/throw/shoot actions.
+- Auto-opens doors while moving into them.
+- Adds stronger wall and camera collision handling to reduce clipping.
+- Adds fallback wake-up logic when Grandpa spawns in bed or lying state.
+- Stabilizes Grandpa movement animation and removes the incorrect start animation that could play before walk.
 
 ## Current Version
-- `v1.6.0`
+- `v1.7.0`
 
 ## Controls (Default)
 - `W/A/S/D` - Move
 - `Mouse X/Y` - Turn / look
-- `Left Shift` - Run
-- `Left Ctrl` or `C` - Crouch
 - `LMB (hold)` - Grab attempt loop
 - `E` - Release held gnome
 - `Q` - Throw held gnome
 - `RMB` - Shoot (if Grandpa has gun)
-- `F` - Interact forward (doors/handles/openables)
+- `R` - Reset Grandpa to spawn position
+
+## Notes About Current Behavior
+- Grandpa has a single fixed movement speed for fairness.
+- Door opening is automatic; manual interact, crouch, and sprint are intentionally disabled.
+- Multiplayer is currently tuned for **host-controlled Grandpa**.
 
 ## Install
 1. Install [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) for the game.
@@ -50,7 +55,7 @@ Output:
 
 ## Known Notes
 - Multiplayer support is currently optimized for **host-as-Grandpa**.
-- Some game cutscenes/mechanics can still force vanilla behavior depending on map state.
+- Some game cutscenes and vanilla round transitions can still override parts of normal behavior depending on map state.
 
 ## Changelog
 See [CHANGELOG.md](./CHANGELOG.md).

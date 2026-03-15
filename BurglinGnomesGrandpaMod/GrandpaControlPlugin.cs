@@ -9,13 +9,13 @@ using UnityEngine;
 
 namespace BurglinGnomesGrandpaMod
 {
-    [BepInPlugin("com.yourname.grandpamod", "Grandpa Control Mod", "1.6.0")]
+    [BepInPlugin("com.yourname.grandpamod", "Grandpa Control Mod", "1.7.0")]
     public class Plugin : BaseUnityPlugin
     {
         private void Awake()
         {
             Harmony.CreateAndPatchAll(typeof(GrandpaModPatches));
-            Logger.LogInfo("Grandpa Mod v1.6.0 loaded");
+            Logger.LogInfo("Grandpa Mod v1.7.0 loaded");
         }
     }
 
@@ -151,6 +151,8 @@ namespace BurglinGnomesGrandpaMod
                 Debug.LogWarning("[GrandpaMod] Grandpa AI not found, assignment skipped.");
                 yield break;
             }
+
+            yield return WaitForGrandpaReady(grandpaAI);
 
             var players = GameProgressionManager.AllPlayers;
             if (players == null || players.Count == 0)
@@ -290,13 +292,170 @@ namespace BurglinGnomesGrandpaMod
             {
                 if (grandpa.kidnapper != null && grandpa.kidnapper.CurrentlyHeld != null)
                 {
-                    grandpa.kidnapper.RemoveHeldWithVelocity(new Vector3(0f, 1.4f, 8.5f));
+                    var held = grandpa.kidnapper.CurrentlyHeld;
+                    Vector3 throwVelocity = grandpa.transform.forward * 11.5f + Vector3.up * 3.0f;
+                    grandpa.ReleasePlayer();
+                    grandpa.StartCoroutine(ApplyThrowImpulseRoutine(held, throwVelocity));
                     if (grandpa.NAnimator != null)
                     {
                         grandpa.NAnimator.SetTrigger("Throw");
                         grandpa.NAnimator.Animator.SetBool("Carrying", false);
                     }
                 }
+            }
+        }
+
+        private static IEnumerator WaitForGrandpaReady(HumanAILink grandpaAI)
+        {
+            float delay = 0f;
+            while (delay < 8f)
+            {
+                ForceWakeGrandpaAnimator(grandpaAI);
+
+                if (!IsGrandpaInBlockedSpawnState(grandpaAI))
+                {
+                    yield break;
+                }
+
+                yield return new WaitForSeconds(0.25f);
+                delay += 0.25f;
+            }
+        }
+
+        internal static bool IsGrandpaInBlockedSpawnState(HumanAILink grandpaAI)
+        {
+            if (grandpaAI == null)
+            {
+                return false;
+            }
+
+            var animator = grandpaAI.GetComponentInChildren<Animator>();
+            if (animator == null)
+            {
+                return false;
+            }
+
+            foreach (var param in animator.parameters)
+            {
+                if (param.type != AnimatorControllerParameterType.Bool)
+                {
+                    continue;
+                }
+
+                string name = param.name.ToLowerInvariant();
+                if ((name.Contains("sleep") || name.Contains("bed") || name.Contains("lying") || name.Contains("lay")) && animator.GetBool(param.name))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        internal static void ForceWakeGrandpaAnimator(HumanAILink grandpaAI)
+        {
+            if (grandpaAI == null || grandpaAI.NAnimator == null || grandpaAI.NAnimator.Animator == null)
+            {
+                return;
+            }
+
+            var animator = grandpaAI.NAnimator.Animator;
+            SetAnimatorBoolIfExists(animator, "Sleep", false);
+            SetAnimatorBoolIfExists(animator, "Sleeping", false);
+            SetAnimatorBoolIfExists(animator, "IsSleeping", false);
+            SetAnimatorBoolIfExists(animator, "InBed", false);
+            SetAnimatorBoolIfExists(animator, "IsInBed", false);
+            SetAnimatorBoolIfExists(animator, "Lying", false);
+            SetAnimatorBoolIfExists(animator, "IsLying", false);
+            SetAnimatorBoolIfExists(animator, "Lay", false);
+
+            ResetAnimatorTriggerIfExists(animator, "WakeUp");
+            ResetAnimatorTriggerIfExists(animator, "GetUp");
+            ResetAnimatorTriggerIfExists(animator, "StandUp");
+            SetAnimatorTriggerIfExists(animator, "WakeUp");
+            SetAnimatorTriggerIfExists(animator, "GetUp");
+            SetAnimatorTriggerIfExists(animator, "StandUp");
+
+            var humanMecanim = grandpaAI.GetComponent<HumanMecanim>();
+            if (humanMecanim != null)
+            {
+                humanMecanim.ResetAnimator();
+            }
+
+            animator.Rebind();
+            animator.Update(0f);
+        }
+
+        private static void SetAnimatorBoolIfExists(Animator animator, string name, bool value)
+        {
+            if (animator == null)
+            {
+                return;
+            }
+
+            foreach (var param in animator.parameters)
+            {
+                if (param.type == AnimatorControllerParameterType.Bool && param.name == name)
+                {
+                    animator.SetBool(name, value);
+                    return;
+                }
+            }
+        }
+
+        private static void SetAnimatorTriggerIfExists(Animator animator, string name)
+        {
+            if (animator == null)
+            {
+                return;
+            }
+
+            foreach (var param in animator.parameters)
+            {
+                if (param.type == AnimatorControllerParameterType.Trigger && param.name == name)
+                {
+                    animator.SetTrigger(name);
+                    return;
+                }
+            }
+        }
+
+        private static void ResetAnimatorTriggerIfExists(Animator animator, string name)
+        {
+            if (animator == null)
+            {
+                return;
+            }
+
+            foreach (var param in animator.parameters)
+            {
+                if (param.type == AnimatorControllerParameterType.Trigger && param.name == name)
+                {
+                    animator.ResetTrigger(name);
+                    return;
+                }
+            }
+        }
+
+        private static IEnumerator ApplyThrowImpulseRoutine(GameEntityBase held, Vector3 velocity)
+        {
+            if (held == null)
+            {
+                yield break;
+            }
+
+            yield return null;
+            yield return null;
+
+            foreach (var rb in held.GetComponentsInChildren<Rigidbody>(true))
+            {
+                if (rb == null || rb.isKinematic)
+                {
+                    continue;
+                }
+
+                rb.linearVelocity = velocity;
+                rb.AddForce(velocity * 0.45f, ForceMode.Impulse);
             }
         }
 
@@ -425,11 +584,9 @@ namespace BurglinGnomesGrandpaMod
         private const byte ActionShoot = 2;
         private const byte ActionThrow = 3;
 
-        private const float WalkSpeed = 8.8f;
-        private const float RunSpeed = 12.8f;
+        private const float WalkSpeed = 8.05f;
         private const float GrabRange = 6.0f;
         private const float GrabInterval = 0.1f;
-        private const float CrouchSpeedMultiplier = 0.45f;
         private const float ExtendedHandForward = 3.2f;
         private const float ExtendedHandRadius = 1.35f;
         private const float CollisionRadius = 0.82f;
@@ -437,9 +594,13 @@ namespace BurglinGnomesGrandpaMod
         private const float CapsuleTop = 1.55f;
         private const float CollisionSkin = 0.26f;
         private const float StepHeight = 0.42f;
-        private const float AutoInteractInterval = 0.15f;
-        private const float AutoInteractDistance = 1.35f;
+        private const float AutoInteractInterval = 0.05f;
+        private const float AutoInteractDistance = 1.90f;
+        private const float AutoInteractProbeForward = 1.02f;
+        private const float AutoInteractDotMin = 0.08f;
+        private const float AutoInteractRepeatBlock = 0.18f;
         private const float CameraCollisionRadius = 0.22f;
+        private const float CameraMinDistance = 0.28f;
         private const float DynamicPushForce = 2.4f;
 
         public PlayerNetworking localGnome;
@@ -455,11 +616,18 @@ namespace BurglinGnomesGrandpaMod
         private Vector3 controlledPosition;
         private bool grabHeld;
         private float nextGrabTime;
-        private bool isCrouching;
         private bool aiSuppressed;
         private float lastMoveInputMagnitude;
+        private float lastForwardInput;
+        private bool wasMovingLastFrame;
+        private float nextAnimatorDebugLogTime;
+        private bool wakeupMovementLogged;
+        private bool wakeupStartedFromBlockedState;
         private float nextAutoInteractTime;
+        private int lastAutoInteractTargetId;
+        private float lastAutoInteractTargetTime;
         private Coroutine standFixRoutine;
+        private Coroutine roundResetRecoveryRoutine;
 
         private readonly List<MonoBehaviour> disabledGrandpaScripts = new List<MonoBehaviour>();
         private readonly List<MonoBehaviour> disabledCameraScripts = new List<MonoBehaviour>();
@@ -557,6 +725,10 @@ namespace BurglinGnomesGrandpaMod
             controlledPosition = transform.position;
             grabHeld = false;
             nextGrabTime = 0f;
+            wasMovingLastFrame = false;
+            nextAnimatorDebugLogTime = 0f;
+            wakeupMovementLogged = false;
+            wakeupStartedFromBlockedState = GrandpaModPatches.IsGrandpaInBlockedSpawnState(aiLink);
 
 
             SetupCamera();
@@ -576,8 +748,15 @@ namespace BurglinGnomesGrandpaMod
 
             initialized = false;
             StopForceStandRoutine();
+            if (localGnome == null)
+            {
+                localGnome = ServerManager.GetLocalPlayer();
+            }
             SetupHiddenGnome(false);
+            DisableAnyActiveCamera();
             RestoreCameraScripts();
+            DestroyModCamera();
+            StartRoundResetRecovery();
         }
 
 
@@ -596,14 +775,94 @@ namespace BurglinGnomesGrandpaMod
             }
         }
 
+        private void StartRoundResetRecovery()
+        {
+            if (roundResetRecoveryRoutine != null)
+            {
+                StopCoroutine(roundResetRecoveryRoutine);
+            }
+
+            roundResetRecoveryRoutine = StartCoroutine(RoundResetRecoveryRoutine());
+        }
+
+        private IEnumerator RoundResetRecoveryRoutine()
+        {
+            for (int i = 0; i < 60; i++)
+            {
+                if (localGnome == null)
+                {
+                    localGnome = ServerManager.GetLocalPlayer();
+                }
+
+                if (localGnome != null)
+                {
+                    SetupHiddenGnome(false);
+                }
+
+                var freshCamera = Camera.main;
+                if (freshCamera != null)
+                {
+                    freshCamera.enabled = true;
+                    roundResetRecoveryRoutine = null;
+                    yield break;
+                }
+
+                yield return new WaitForSeconds(0.25f);
+            }
+
+            roundResetRecoveryRoutine = null;
+        }
+
+        private void DisableAnyActiveCamera()
+        {
+            foreach (var cam in UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (cam != null)
+                {
+                    cam.enabled = false;
+                }
+            }
+        }
+
+        private void DestroyModCamera()
+        {
+            if (myCamera == null)
+            {
+                return;
+            }
+
+            var cameraObject = myCamera.gameObject;
+            myCamera = null;
+            UnityEngine.Object.Destroy(cameraObject);
+        }
+
         private IEnumerator ForceStandRoutine()
         {
+            int stableFrames = 0;
             for (int i = 0; i < 35; i++)
             {
-                ForceGrandpaStandUp();
-                if (i < 10)
+                bool blocked = GrandpaModPatches.IsGrandpaInBlockedSpawnState(aiLink);
+                if (!blocked)
                 {
-                    SnapToGroundHard();
+                    stableFrames++;
+                    if (stableFrames >= 3)
+                    {
+                        if (wakeupStartedFromBlockedState)
+                        {
+                            SnapToGroundHard();
+                            controlledPosition = transform.position;
+                        }
+                        break;
+                    }
+                }
+                else
+                {
+                    stableFrames = 0;
+                    ForceGrandpaStandUp();
+                    if (i < 10)
+                    {
+                        SnapToGroundHard();
+                    }
                 }
                 yield return new WaitForSeconds(0.1f);
             }
@@ -615,6 +874,8 @@ namespace BurglinGnomesGrandpaMod
         {
             transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
 
+            GrandpaModPatches.ForceWakeGrandpaAnimator(aiLink);
+
             if (anim != null)
             {
                 TrySetAnimatorBool("Sleeping", false);
@@ -624,26 +885,10 @@ namespace BurglinGnomesGrandpaMod
                 TrySetAnimatorBool("Lying", false);
                 TrySetAnimatorBool("IsLying", false);
                 TrySetAnimatorBool("Lay", false);
-
-                if (HasAnimatorParam("WakeUp", AnimatorControllerParameterType.Trigger))
-                {
-                    anim.SetTrigger("WakeUp");
-                }
-                if (HasAnimatorParam("GetUp", AnimatorControllerParameterType.Trigger))
-                {
-                    anim.SetTrigger("GetUp");
-                }
-                if (HasAnimatorParam("StandUp", AnimatorControllerParameterType.Trigger))
-                {
-                    anim.SetTrigger("StandUp");
-                }
             }
 
             if (aiLink != null)
             {
-                TryInvokeNoArg(aiLink, "WakeUp");
-                TryInvokeNoArg(aiLink, "GetUp");
-                TryInvokeNoArg(aiLink, "StandUp");
                 TryInvokeNoArg(aiLink, "ExitBed");
                 TryInvokeNoArg(aiLink, "LeaveBed");
             }
@@ -913,8 +1158,6 @@ namespace BurglinGnomesGrandpaMod
 
             float mouseX = Input.GetAxis("Mouse X");
             float mouseY = Input.GetAxis("Mouse Y");
-            isCrouching = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.C);
-            UpdateCrouchAnimation();
 
             HandleLook(mouseX, mouseY);
             HandleMovement(mouseX);
@@ -949,11 +1192,17 @@ namespace BurglinGnomesGrandpaMod
                 SendAction(ActionShoot, 0);
             }
 
-            bool wantsInteract = Input.GetKeyDown(KeyCode.F);
-            if (wantsInteract || (lastMoveInputMagnitude > 0.05f && Time.time >= nextAutoInteractTime))
+            bool wantsAutoDoorOpen = lastForwardInput > 0.15f && lastMoveInputMagnitude > 0.05f;
+            if (wantsAutoDoorOpen && Time.time >= nextAutoInteractTime)
             {
                 TryForwardInteraction();
                 nextAutoInteractTime = Time.time + AutoInteractInterval;
+            }
+
+            if (!wakeupMovementLogged && Time.timeSinceLevelLoad > 1.5f && !GrandpaModPatches.IsGrandpaInBlockedSpawnState(aiLink))
+            {
+                wakeupMovementLogged = true;
+                DebugAnimatorState("post-wakeup");
             }
         }
 
@@ -1016,11 +1265,15 @@ namespace BurglinGnomesGrandpaMod
             if (Input.GetKey(KeyCode.D)) { move += transform.right; inputX += 1f; }
 
             lastMoveInputMagnitude = Mathf.Clamp01(new Vector2(inputX, inputY).magnitude);
-            float speed = Input.GetKey(KeyCode.LeftShift) ? RunSpeed : WalkSpeed;
-            if (isCrouching)
+            lastForwardInput = inputY;
+            bool isMovingNow = lastMoveInputMagnitude > 0.05f;
+            if (isMovingNow && !wasMovingLastFrame && Time.time >= nextAnimatorDebugLogTime)
             {
-                speed *= CrouchSpeedMultiplier;
+                nextAnimatorDebugLogTime = Time.time + 0.75f;
+                DebugAnimatorState("movement-start");
             }
+            wasMovingLastFrame = isMovingNow;
+            float speed = WalkSpeed;
 
             Vector3 planarDelta = move.sqrMagnitude > 0f ? move.normalized * speed * Time.deltaTime : Vector3.zero;
             Vector3 newPos = ResolveCollision(controlledPosition, planarDelta);
@@ -1035,9 +1288,12 @@ namespace BurglinGnomesGrandpaMod
                 anim.SetFloat("InputMagnitude", inMag);
                 anim.SetFloat("X", inputX);
                 anim.SetFloat("Y", inputY);
-                anim.SetFloat("RotationMagnitude", Mathf.Clamp01(Mathf.Abs(mouseX) * 0.35f));
+                anim.SetFloat("RotationMagnitude", 0f);
+                TrySetAnimatorFloat("WalkStartRotation", 0f);
+                TrySetAnimatorFloat("RotDelta", 0f);
+                TrySetAnimatorFloat("TurningAngle", 0f);
+                TrySetAnimatorFloat("StartAngle", 0f);
                 anim.SetFloat("Speed", inMag);
-
                 if (aiLink != null && aiLink.kidnapper != null)
                 {
                     anim.SetBool("Carrying", aiLink.kidnapper.CurrentlyHeld != null);
@@ -1128,8 +1384,8 @@ namespace BurglinGnomesGrandpaMod
         private void HandleCamera()
         {
             Vector3 eyeBase = headBone != null
-                ? headBone.position + transform.up * (isCrouching ? 0.14f : 0.20f)
-                : transform.position + transform.up * (isCrouching ? 1.52f : 1.92f);
+                ? headBone.position + transform.up * 0.20f
+                : transform.position + transform.up * 1.92f;
             Vector3 desiredCamPos = eyeBase + transform.forward * 1.00f + transform.up * 0.04f;
 
             Vector3 camDir = desiredCamPos - eyeBase;
@@ -1157,7 +1413,7 @@ namespace BurglinGnomesGrandpaMod
 
                 if (blocked)
                 {
-                    float safeDistance = Mathf.Clamp(nearest - 0.18f, 0.06f, camDistance);
+                    float safeDistance = Mathf.Clamp(nearest - 0.18f, CameraMinDistance, camDistance);
                     camPos = eyeBase + dirNorm * safeDistance;
                 }
             }
@@ -1240,24 +1496,6 @@ namespace BurglinGnomesGrandpaMod
             return true;
         }
 
-        private void UpdateCrouchAnimation()
-        {
-            if (anim == null)
-            {
-                return;
-            }
-
-            TrySetAnimatorBool("Crouching", isCrouching);
-            TrySetAnimatorBool("Crouch", isCrouching);
-            TrySetAnimatorBool("IsCrouching", isCrouching);
-            TrySetAnimatorBool("IsCrouched", isCrouching);
-
-            if (HasAnimatorParam("CrouchAmount", AnimatorControllerParameterType.Float))
-            {
-                anim.SetFloat("CrouchAmount", isCrouching ? 1f : 0f);
-            }
-        }
-
         private bool HasAnimatorParam(string name, AnimatorControllerParameterType type)
         {
             if (anim == null)
@@ -1283,6 +1521,78 @@ namespace BurglinGnomesGrandpaMod
                 anim.SetBool(name, value);
             }
         }
+
+        private void TrySetAnimatorFloat(string name, float value)
+        {
+            if (HasAnimatorParam(name, AnimatorControllerParameterType.Float))
+            {
+                anim.SetFloat(name, value);
+            }
+        }
+
+        private void DebugAnimatorState(string context)
+        {
+            if (anim == null)
+            {
+                Debug.Log($"[GrandpaMod][AnimDebug] {context}: animator=null");
+                return;
+            }
+
+            AnimatorStateInfo baseState = anim.GetCurrentAnimatorStateInfo(0);
+            AnimatorStateInfo nextState = anim.GetNextAnimatorStateInfo(0);
+            string currentPath = TryGetAnimatorStateName(baseState.fullPathHash, 0);
+            string nextPath = anim.IsInTransition(0) ? TryGetAnimatorStateName(nextState.fullPathHash, 0) : "<none>";
+
+            Debug.Log(
+                $"[GrandpaMod][AnimDebug] {context}: " +
+                $"current={currentPath} " +
+                $"currentHash={baseState.fullPathHash} " +
+                $"next={nextPath} " +
+                $"nextHash={nextState.fullPathHash} " +
+                $"transition={anim.IsInTransition(0)} " +
+                $"inputMag={lastMoveInputMagnitude:F2}");
+        }
+
+        private string TryGetAnimatorStateName(int fullPathHash, int layer)
+        {
+            if (anim == null)
+            {
+                return "<no-animator>";
+            }
+
+            try
+            {
+                var clips = anim.GetCurrentAnimatorClipInfo(layer);
+                if (clips != null && clips.Length > 0 && clips[0].clip != null)
+                {
+                    return clips[0].clip.name;
+                }
+            }
+            catch
+            {
+            }
+
+            return $"hash:{fullPathHash}";
+        }
+
+        private bool CanTriggerAutoInteract(UnityEngine.Object target)
+        {
+            if (target == null)
+            {
+                return false;
+            }
+
+            int targetId = target.GetInstanceID();
+            if (targetId == lastAutoInteractTargetId && Time.time < lastAutoInteractTargetTime + AutoInteractRepeatBlock)
+            {
+                return false;
+            }
+
+            lastAutoInteractTargetId = targetId;
+            lastAutoInteractTargetTime = Time.time;
+            return true;
+        }
+
         private void TryForwardInteraction()
         {
             if (aiLink == null)
@@ -1290,7 +1600,7 @@ namespace BurglinGnomesGrandpaMod
                 return;
             }
 
-            Vector3 probe = transform.position + Vector3.up * 1.0f + transform.forward * 1.0f;
+            Vector3 probe = transform.position + Vector3.up * 1.0f + transform.forward * AutoInteractProbeForward;
             var cols = Physics.OverlapSphere(probe, AutoInteractDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide);
             if (cols == null || cols.Length == 0)
             {
@@ -1314,7 +1624,13 @@ namespace BurglinGnomesGrandpaMod
                 var handle = c.GetComponentInParent<PlayerInteractListener>();
                 if (handle != null)
                 {
-                    float dh = Vector3.Distance(transform.position, handle.transform.position);
+                    Vector3 toHandle = (handle.transform.position - probe);
+                    if (toHandle.sqrMagnitude > 0.0001f && Vector3.Dot(transform.forward, toHandle.normalized) < AutoInteractDotMin)
+                    {
+                        continue;
+                    }
+
+                    float dh = Vector3.Distance(probe, handle.transform.position);
                     if (dh < bestHandle)
                     {
                         bestHandle = dh;
@@ -1325,7 +1641,13 @@ namespace BurglinGnomesGrandpaMod
                 var openable = c.GetComponentInParent<OpenableInteractable>();
                 if (openable != null)
                 {
-                    float doo = Vector3.Distance(transform.position, openable.transform.position);
+                    Vector3 toOpenable = (openable.transform.position - probe);
+                    if (toOpenable.sqrMagnitude > 0.0001f && Vector3.Dot(transform.forward, toOpenable.normalized) < AutoInteractDotMin)
+                    {
+                        continue;
+                    }
+
+                    float doo = Vector3.Distance(probe, openable.transform.position);
                     if (doo < bestOpenable)
                     {
                         bestOpenable = doo;
@@ -1336,7 +1658,13 @@ namespace BurglinGnomesGrandpaMod
                 var doorCandidate = c.GetComponentInParent<PushableDoor>();
                 if (doorCandidate != null && doorCandidate.CanBePushed)
                 {
-                    float dd = Vector3.Distance(transform.position, doorCandidate.transform.position);
+                    Vector3 toDoor = (doorCandidate.transform.position - probe);
+                    if (toDoor.sqrMagnitude > 0.0001f && Vector3.Dot(transform.forward, toDoor.normalized) < AutoInteractDotMin)
+                    {
+                        continue;
+                    }
+
+                    float dd = Vector3.Distance(probe, doorCandidate.transform.position);
                     if (dd < bestDoor)
                     {
                         bestDoor = dd;
@@ -1345,7 +1673,7 @@ namespace BurglinGnomesGrandpaMod
                 }
             }
 
-            if (nearestHandle != null && localGnome != null)
+            if (nearestHandle != null && localGnome != null && CanTriggerAutoInteract(nearestHandle))
             {
                 nearestHandle.Interact(localGnome);
                 return;
@@ -1354,7 +1682,8 @@ namespace BurglinGnomesGrandpaMod
             if (nearestOpenable != null)
             {
                 var type = nearestOpenable.InteractType;
-                if (type == InteractableObject.Type.DOOR || type == InteractableObject.Type.FRIDGE_DOOR || type == InteractableObject.Type.OVEN_DOOR)
+                if ((type == InteractableObject.Type.DOOR || type == InteractableObject.Type.FRIDGE_DOOR || type == InteractableObject.Type.OVEN_DOOR) &&
+                    CanTriggerAutoInteract(nearestOpenable))
                 {
                     nearestOpenable.UnClasp();
                     nearestOpenable.Open();
@@ -1362,7 +1691,7 @@ namespace BurglinGnomesGrandpaMod
                 }
             }
 
-            if (nearestDoor != null)
+            if (nearestDoor != null && CanTriggerAutoInteract(nearestDoor))
             {
                 Vector3 forceDir = (nearestDoor.transform.position - transform.position).normalized;
                 if (forceDir.sqrMagnitude < 0.0001f)
@@ -1372,68 +1701,13 @@ namespace BurglinGnomesGrandpaMod
 
                 var push = new IPlayerPushable.PushParams
                 {
-                    force = forceDir * 1.8f,
+                    force = forceDir * 1.15f,
                     forcePosition = probe
                 };
                 nearestDoor.Push(push);
                 return;
             }
 
-            InteractableObject nearest = null;
-            float best = float.MaxValue;
-            foreach (var c in cols)
-            {
-                if (c == null)
-                {
-                    continue;
-                }
-
-                var i = c.GetComponentInParent<InteractableObject>();
-                if (i == null || !i.CanHumanInteract)
-                {
-                    continue;
-                }
-
-                float d = Vector3.Distance(transform.position, i.transform.position);
-                if (d < best)
-                {
-                    best = d;
-                    nearest = i;
-                }
-            }
-
-            if (nearest == null)
-            {
-                return;
-            }
-
-            var tInt = nearest.InteractType;
-            bool canStuffPlayer = aiLink.kidnapper != null && aiLink.kidnapper.CurrentlyHeld != null &&
-                                  (tInt == InteractableObject.Type.PLAYER_PUT_FRIDGE ||
-                                   tInt == InteractableObject.Type.PLAYER_PUT_OVEN ||
-                                   tInt == InteractableObject.Type.PLAYER_FLUSH_TOILET ||
-                                   tInt == InteractableObject.Type.PLAYER_THROW_FIREPLACE ||
-                                   tInt == InteractableObject.Type.PLAYER_THROW_OUT_FRONTDOOR ||
-                                   tInt == InteractableObject.Type.PLAYER_KIDNAP_DESTINATION ||
-                                   tInt == InteractableObject.Type.PLAYER_HIDING_SPOT);
-
-            if (!canStuffPlayer)
-            {
-                return;
-            }
-
-            var held = aiLink.kidnapper.CurrentlyHeld;
-            if (held == null)
-            {
-                return;
-            }
-
-            held.Teleport(nearest.HumanHoldPosition);
-            aiLink.kidnapper.CurrentlyHeld = null;
-            if (anim != null)
-            {
-                anim.SetBool("Carrying", false);
-            }
         }
 
         private void TryGrabPlayer()
