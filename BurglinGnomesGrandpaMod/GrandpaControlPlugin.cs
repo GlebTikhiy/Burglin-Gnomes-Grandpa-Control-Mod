@@ -9,13 +9,13 @@ using UnityEngine;
 
 namespace BurglinGnomesGrandpaMod
 {
-    [BepInPlugin("com.yourname.grandpamod", "Grandpa Control Mod", "1.7.0")]
+    [BepInPlugin("com.yourname.grandpamod", "Grandpa Control Mod", "1.7.1")]
     public class Plugin : BaseUnityPlugin
     {
         private void Awake()
         {
             Harmony.CreateAndPatchAll(typeof(GrandpaModPatches));
-            Logger.LogInfo("Grandpa Mod v1.7.0 loaded");
+            Logger.LogInfo("Grandpa Mod v1.7.1 loaded");
         }
     }
 
@@ -1185,11 +1185,6 @@ namespace BurglinGnomesGrandpaMod
             if (Input.GetKeyDown(KeyCode.Q))
             {
                 SendAction(ActionThrow, 0);
-            }
-
-            if (Input.GetMouseButtonDown(1))
-            {
-                SendAction(ActionShoot, 0);
             }
 
             bool wantsAutoDoorOpen = lastForwardInput > 0.15f && lastMoveInputMagnitude > 0.05f;
