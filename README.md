@@ -78,5 +78,5 @@ See [CHANGELOG.md](./CHANGELOG.md).
 ## License
 MIT - see [LICENSE](./LICENSE).
 
-
-
+## NexusMods
+https://www.nexusmods.com/burglingnomes/mods/34
